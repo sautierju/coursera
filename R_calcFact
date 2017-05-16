@@ -1,0 +1,133 @@
+calc_Unique_Factor<-function(dataUniverse,FactorName){
+  
+  library(data.table)
+  library(PerformanceAnalytics)
+  library(dplyr)
+  
+  #dataUniverse<-ML_C0A0_Map_05M[,c("Date","CreditParent","Symbol","OptionAdjustSpread","EffectiveDuration","TotalReturnMTD")]
+  
+  #Calculate Residual Percentile
+  dataUniverse<-as.data.table(dataUniverse)
+  dataUniverse<-dataUniverse[,Factor_Percentile := rank(get(FactorName))/length(get(FactorName)),by=list(Date)]
+  
+  #Calculate Quintile
+  dataUniverse<-ddply(dataUniverse,.(Date),function(xTable){
+    FactorQuintile<-as.integer(cut(x=xTable[,"Factor_Percentile"], quantile(xTable[,"Factor_Percentile"], probs=0:5/5,type=1,na.rm=TRUE),include.lowest=TRUE))
+    data.frame(xTable,FactorQuintile)
+  })
+  
+  #Count for each date the total number of Issuers by Quintile
+  dataUniverse<-ddply(dataUniverse,c("Date","FactorQuintile"),function(x){
+    NbIssuersByQ<-length(x$Symbol)
+    data.frame(x,NbIssuersByQ)
+  })
+  
+  #Calculate Weight of each Issuer by Quintile
+  dataUniverse$BondsWi<-(1/dataUniverse$NbIssuersByQ)
+  
+  
+  for (QuintileNb in 1:5){
+    
+    #Extract information based on Quintile
+    tmpMat<-dataUniverse[dataUniverse$FactorQuintile==QuintileNb,]
+    
+    #Returns Matrix
+    RiMat<-subset(tmpMat,select=c("Date","Symbol","TotalReturnMTD"))
+    RiMat<-acast(RiMat,Date~Symbol,value.var="TotalReturnMTD")
+    RiMat<-as.data.frame(RiMat)
+    RiMat<-as.xts(RiMat)
+    RiMat<-RiMat/100
+    
+    #Weights Matrix
+    WiMat_TS<-subset(tmpMat,select=c("Date","Symbol","BondsWi"))
+    #Add one day to the date to be on first day of the month
+    WiMat<-WiMat_TS
+    WiMat$Date<-WiMat_TS$Date+1
+    
+    WiMat<-acast(WiMat,Date~Symbol,value.var="BondsWi")
+    WiMat<-as.data.frame(WiMat)
+    WiMat<-as.xts(WiMat)
+    
+    RiMat[is.na(RiMat)]<-0
+    WiMat[is.na(WiMat)]<-0
+    
+    print(paste("Check on Weights and Returns Matrix colNames: ",all(colnames(RiMat)==colnames(WiMat))))
+    print(paste("Check on Weights: ", sum(WiMat)))
+    
+    ################################################################################################################  
+    #(4) Calculate Quintiles Portfolios Returns and Turn Over  #####################################################
+    ################################################################################################################
+    
+    #Create Portfolio Object with Returns and Wi
+    tmpPort<-Return.portfolio(RiMat,weights=WiMat,rebalance_on="monthly",verbose=TRUE)
+    
+    #Returns
+    tmpPortReturns<-tmpPort$returns
+    colnames(tmpPortReturns)<-paste("Q",QuintileNb,sep="")
+    
+    if(QuintileNb==1){
+      FQ_Returns <- tmpPortReturns
+      
+    }else{
+      FQ_Returns  <- cbind(FQ_Returns,tmpPortReturns[,1])
+    }
+  }
+  
+  #2 Calculate XS_vs_Sovereign Return Quintile
+  for (QuintileNb in 1:5){
+    
+    #Extract information based on Quintile
+    tmpMat<-dataUniverse[dataUniverse$FactorQuintile==QuintileNb,]
+    
+    #Returns Matrix
+    RiMat<-subset(tmpMat,select=c("Date","Symbol","XSvsSovereign"))
+    RiMat<-acast(RiMat,Date~Symbol,value.var="XSvsSovereign")
+    RiMat<-as.data.frame(RiMat)
+    RiMat<-as.xts(RiMat)
+    RiMat<-RiMat/100
+    
+    #Weights Matrix
+    WiMat_TS<-subset(tmpMat,select=c("Date","Symbol","BondsWi"))
+    #Add one day to the date to be on first day of the month
+    WiMat<-WiMat_TS
+    WiMat$Date<-WiMat_TS$Date+1
+    
+    WiMat<-acast(WiMat,Date~Symbol,value.var="BondsWi")
+    WiMat<-as.data.frame(WiMat)
+    WiMat<-as.xts(WiMat)
+    
+    RiMat[is.na(RiMat)]<-0
+    WiMat[is.na(WiMat)]<-0
+    
+    print(paste("Check on Weights and Returns Matrix colNames: ",all(colnames(RiMat)==colnames(WiMat))))
+    print(paste("Check on Weights: ", sum(WiMat)))
+    
+    ################################################################################################################  
+    #(4) Calculate Quintiles Portfolios Returns and Turn Over  #####################################################
+    ################################################################################################################
+    
+    #Create Portfolio Object with Returns and Wi
+    tmpPort<-Return.portfolio(RiMat,weights=WiMat,rebalance_on="monthly",verbose=TRUE)
+    
+    #Returns
+    tmpPortReturns<-tmpPort$returns
+    colnames(tmpPortReturns)<-paste("Q",QuintileNb,sep="")
+    
+    if(QuintileNb==1){
+      FQ_XSReturns <- tmpPortReturns
+      
+    }else{
+      FQ_XSReturns  <- cbind(FQ_XSReturns,tmpPortReturns[,1])
+    }
+  }
+  
+  #Permut Column to have Q1 as best ranking Portfolio (and not Q5)
+  FQ_Returns[,c(1:5)]   <- FQ_Returns[,c(5:1)]
+  FQ_XSReturns[,c(1:5)] <- FQ_XSReturns[,c(5:1)]
+  
+  ################################################################################################################  
+  #(5) Return the Factor Stats  ##################################################################################
+  ################################################################################################################
+  FactorQ_Stats<-list(Returns=FQ_Returns,XSReturns=FQ_XSReturns)
+  return(FactorQ_Stats)
+}

@@ -1,0 +1,131 @@
+report_Factor_Quartile<-function(PortReturns,BenchReturns,outputFile){
+  
+  library(PerformanceAnalytics)
+  library(ggplot2)
+  library(reshape2)
+  library(grid)
+  library(gridBase)
+  library(gridExtra)
+  library(RColorBrewer)
+  
+  
+  #Define Colors Set
+  BrewColors<-brewer.pal(6,"Dark2")
+  CandriamColors<-c("#0071BA","#E76114","#A5A5A6","#17956A","#F7A73E","#4B4B4B")
+  
+  Q_Colors<-CandriamColors
+  
+  #Define Global Matrix with Portfolios and Benchmark Returns
+  PReturns<-PortReturns$Returns
+  XSReturn<-PortReturns$XSReturns
+  
+  BReturns<-BenchReturns$Portfolio$returns
+  b_XSReturn<-BenchReturns$XS_Bonds
+  
+    nbPorts<-ncol(PReturns)
+    XS_TabRet<-XSReturn
+    XS_TabRet$Benchmark<-b_XSReturn
+    
+    TabRet<-merge.xts(PReturns,BReturns)
+    colnames(TabRet)[6]<-"Benchmark"
+
+  #(1°) First page of Reporting
+        
+    pdf(outputFile,width=19,height=11)
+    layout(matrix(c(1, 2, 3, 4), ncol=2, nrow=2, byrow=TRUE), widths=c(50, 50))
+
+      #(1)Quintiles Relative Performance
+        chart.RelativePerformance(PReturns,BReturns,colorset=Q_Colors,main="Relative Performance vs Benchmark",minor.ticks=FALSE,legend.loc = "bottomleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+    
+      #(2)Avg AnnXS By Q
+        #TabRetRel<-sweep(PReturns,1,BReturns,"-")
+        #AvgAnnXs<-matrix(0,nrow=1,ncol=5)
+        #AvgAnnXs[1,]<-colMeans(TabRetRel)
+        #AvgAnnXs[1,]<-(1+AvgAnnXs[1,])^(12/1)-1
+        #colnames(AvgAnnXs)<-colnames(TabRetRel)
+        #AvgAnnXs<-AvgAnnXs*100
+        
+        TabRetRel<-merge.xts(PReturns,BReturns)
+        colnames(TabRetRel)[6]<-"Benchmark"
+        TabRetRel<-as.data.frame(TabRetRel)
+        TabRetRel$Q1_XS<-TabRetRel$Q1-TabRetRel$Benchmark
+        TabRetRel$Q2_XS<-TabRetRel$Q2-TabRetRel$Benchmark
+        TabRetRel$Q3_XS<-TabRetRel$Q3-TabRetRel$Benchmark
+        TabRetRel$Q4_XS<-TabRetRel$Q4-TabRetRel$Benchmark
+        TabRetRel$Q5_XS<-TabRetRel$Q5-TabRetRel$Benchmark
+        
+        relAnnPerf<-Return.annualized.excess(PReturns,BReturns)*100
+        
+        AvgXS_BP<-barplot(height=relAnnPerf,main="Avg Annual Performance vs Benchmark",col =Q_Colors[1])
+        text(AvgXS_BP,round(relAnnPerf[1,],digits=2),labels=round(relAnnPerf[1,],digits=2),pos=1) 
+        
+      #(3)Mean XSReturn vs Sovereign
+        Avg_XS_vs_Bonds<-matrix(0,nrow=1,ncol=5)
+        Avg_XS_vs_Bonds[1,]<-colMeans(XSReturn)
+        Avg_XS_vs_Bonds<-cbind(Avg_XS_vs_Bonds,colMeans(b_XSReturn))
+        Avg_XS_vs_Bonds[1,]<-(1+Avg_XS_vs_Bonds[1,])^(12/1)-1
+        colnames(Avg_XS_vs_Bonds)<-c(colnames(XSReturn),"Benchmark")
+        Avg_XS_vs_Bonds<-Avg_XS_vs_Bonds*100           
+        
+      #AvgXS_BP<-barplot(height=AvgAnnXs,main="Avg Annual Excess Returns by Quintile",ylim=range(pretty(c(min(AvgAnnXs[1,]),max(AvgAnnXs[1,])+1.0))),col =Q_Colors[1])
+      #text(AvgXS_BP,round(AvgAnnXs[1,],digits=2),labels=round(AvgAnnXs[1,],digits=2),pos=3) 
+        
+      chart.CumReturns(XS_TabRet,wealth.index=TRUE,colorset=Q_Colors,main="Cumulative Excess Returns vs Sovereign",minor.ticks=FALSE,legend.loc = "bottomleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)  
+      
+      #AvgXS_BP<-barplot(height=Avg_XS_vs_Bonds,main="Avg Annual Excess Returns vs Sovereign",ylim=range(pretty(c(min(Avg_XS_vs_Bonds[1,]),max(Avg_XS_vs_Bonds[1,])+1.0))),col =Q_Colors[1])
+      AvgXS_Bonds_BP<-barplot(height=Avg_XS_vs_Bonds,main="Avg Annual Excess Returns vs Sovereign by Quintile",col =Q_Colors[1])
+      text(AvgXS_Bonds_BP,round(Avg_XS_vs_Bonds[1,],digits=2),labels=round(Avg_XS_vs_Bonds[1,],digits=2),pos=1) 
+        
+      
+      #(3)Cumulative Returns (Q+Bench)
+        #chart.CumReturns(TabRet,wealth.index=TRUE,colorset=Q_Colors,main="Cumulative Total Return",minor.ticks=FALSE,legend.loc = "topleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+      
+      #(4)Q1-Q5 Long/Short Portfolio
+        #LSPort<-0.5*TabRet[,1]-0.5*TabRet[,5]
+        #chart.CumReturns(LSPort,wealth.index=TRUE,colorset=Q_Colors[1],main="Q1-Q5 Long-Short Portfolio - Cumulative Return",minor.ticks=FALSE,legend.loc = "topleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+        #chart.RollingPerformance(TabRet,colorset=Q_Colors,FUN="SharpeRatio.annualized",main="12M Sharpe Ratio",minor.ticks=FALSE,legend.loc = "topleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+        #chart.CumReturns(XSReturn,wealth.index=TRUE,colorset=Q_Colors,main="Cumulative XSReturn vs Sovereign",minor.ticks=FALSE,legend.loc = "topleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+        
+        
+        title(outputFile,outer=TRUE,line=-2)
+  #(2°) Second page of Reporting
+        
+    layout(matrix(c(1,2,3,4), ncol=2, nrow=2, byrow=TRUE), widths=c(50, 50))
+    
+      #(1) Drawdown Historic
+        chart.Drawdown(TabRet,colorset=Q_Colors,FUN="sd.annualized",main="Max Drawdown",minor.ticks=FALSE,legend.loc = "bottomright",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+        
+      #(2)Rolling Stdev
+        chart.RollingPerformance(TabRet,colorset=Q_Colors,FUN="sd.annualized",main="12M Rolling Stdev",minor.ticks=FALSE,legend.loc = "topleft",ylab="",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+      
+      #(3)Rolling T.E
+        chart.RollingPerformance(TabRetRel[,7:11],colorset=Q_Colors,FUN="sd.annualized",minor.ticks=FALSE,legend.loc = "topleft",ylab="",main="12M Rolling Tracking Error",cex.axis=1.2,cex.legend=1.2,cex.main=1.2)
+        
+        
+      #(4)Statistics Table
+        #Annualized Return Table
+          Stats_Table<-table.AnnualizedReturns(TabRet,digits=5)
+          Stats_Table[1,]<-paste0(as.numeric(Stats_Table[1,])*100,"%")
+          Stats_Table[2,]<-paste0(as.numeric(Stats_Table[2,])*100,"%")
+          Stats_Table[3,]<-round(as.numeric(Stats_Table[3,]),digits=2)
+
+          Stats_Table[4,]<-round(Avg_XS_vs_Bonds[1,],digits=2)
+          rownames(Stats_Table)[4]<-"Avg Annualized XSReturns vs Sovereign"
+          
+        #Drawdown Table
+          
+          Stats_Table[5,1]<-paste0(table.Drawdowns(PReturns$Q1)[1,4]*100,"%")
+          Stats_Table[5,2]<-paste0(table.Drawdowns(PReturns$Q2)[1,4]*100,"%")
+          Stats_Table[5,3]<-paste0(table.Drawdowns(PReturns$Q3)[1,4]*100,"%")
+          Stats_Table[5,4]<-paste0(table.Drawdowns(PReturns$Q4)[1,4]*100,"%")
+          Stats_Table[5,5]<-paste0(table.Drawdowns(PReturns$Q5)[1,4]*100,"%")
+          Stats_Table[5,6]<-paste0(table.Drawdowns(BReturns)[1,4]*100,"%")
+          rownames(Stats_Table)[5]<-"Max Drawdown"
+          
+        plot.new()    
+        grid.table(Stats_Table,theme=ttheme_minimal(),vp=baseViewports()$figure)
+     
+        title(outputFile,outer=TRUE,line=-2)
+  dev.off()
+  
+}

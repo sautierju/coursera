@@ -1,0 +1,60 @@
+Sub Universal_Sreening_DL(ByVal Screen As String, WK As Worksheet)
+
+    'Get Screening output from Factset and save it in temp file
+    Dim fdsapi As New FactSetAPI
+    Dim varResult As Variant
+    Dim lastRow As Double
+    Dim btestDate As String
+    'Dim WK_univ As Worksheet
+    
+    'Activate Worksheet to export data
+    WK.Activate
+    WK.Cells(1, 1).Activate
+    btestDate = Worksheets("Main").Range("F2").Value
+    WK.AutoFilterMode = False
+    WK.Range(WK.Cells(2, 1), WK.Cells(100000, 13)).ClearContents
+    
+    Worksheets(WK.Name & "_Univ").Range("A1:E100000").ClearContents
+
+    varResult = fdsapi.RunApplication("UNIVERSAL SCREENING", _
+        "BACKTEST DATE=" & btestDate, _
+        "SCREEN=" & Screen, _
+        "OUTPUT TYPE=ACTIVE SPREADSHEET", _
+        "OUTPUT VIEW=MAIN REPORT", _
+        "EXIT AFTER OUTPUT=TRUE")
+  
+    'WK.Range(WK.Cells(9, 13), WK.Cells(100000, 36)).ClearContents
+        Rows("2:8").Select
+            Selection.Delete Shift:=xlUp
+        Columns("L:AJ").Select
+            Selection.Delete Shift:=xlLeft
+    'Add Header
+        Worksheets("header").Range("A1:M1").Copy Destination:=WK.Range("A1")
+    'Clear last two rows
+         lastRow = ActiveSheet.Cells(9, 1).End(xlDown).Row
+        WK.Range(Cells(lastRow + 2, 1), Cells(lastRow + 3, 12)).ClearContents
+    'Copy/Paste value in "_Univ" Worksheet
+        ActiveSheet.Range(Cells(1, 1), Cells(lastRow, 4)).Copy Destination:=Worksheets(WK.Name & "_Univ").Range("A1")
+    
+End Sub
+
+Sub Upload_DataCentral(ByVal WK_Name As String, ByVal OFDB_Name As String)
+    
+    Dim varResult As Variant
+    Dim FDSAPI As Object
+    Dim WK_Path As String
+    
+    WK_Path = Application.ActiveWorkbook.Path
+    WK_FullName = WK_Path & "\" & WK_Name
+    OFDBFullName = "Client:/Investment_engineers/Sb_eq_sri/" & OFDB_Name
+    
+  Set FDSAPI = CreateObject("factset.factset_api")
+      varResult = FDSAPI.RunApplication("Data Central", _
+          "COMMAND=Upload", _
+          "PC_DATABASE =" & WK_FullName, _
+          "DESCRIPTOR= Client:/Investment_engineers/Sb_eq_sri/UNIV_FORMAT", _
+          "ONLINE_DATABASE=" & OFDBFullName, _
+          "MODE = update", _
+          "BATCH = True")
+      Set varResult = Nothing
+End Sub
